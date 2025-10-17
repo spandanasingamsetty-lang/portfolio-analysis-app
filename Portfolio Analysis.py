@@ -3,20 +3,28 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import datetime
+import requests
+from io import StringIO
 
-# ------------------------
-# Page Setup
-# ------------------------
-st.set_page_config(page_title="Portfolio Analysis", layout="wide")
-st.title("PortfolioAnalysis")
+st.set_page_config(page_title="PortfolioAnalysis – Spandana, Visista", layout="wide")
+st.title("PortfolioAnalysis – Spandana, Visista")
 st.markdown("Select NSE companies, set investment parameters, and calculate optimal portfolio weights.")
 
 # ------------------------
-# Load NSE Tickers CSV
+# Fetch NSE tickers dynamically
 # ------------------------
-# Download the latest NSE CSV from https://www1.nseindia.com/content/equities/EQUITY_L.csv
-# and place it in the app folder
-nse_df = pd.read_csv('EQUITY_L.csv')  # SYMBOL, NAME OF COMPANY
+st.info("Fetching list of NSE companies...")
+nse_url = "https://www1.nseindia.com/content/equities/EQUITY_L.csv"
+
+# Some NSE URLs need headers to allow access
+headers = {"User-Agent": "Mozilla/5.0"}
+response = requests.get(nse_url, headers=headers)
+if response.status_code != 200:
+    st.error("Failed to fetch NSE tickers. Try again later.")
+    st.stop()
+
+csv_data = StringIO(response.text)
+nse_df = pd.read_csv(csv_data)
 nse_df = nse_df[['SYMBOL', 'NAME OF COMPANY']].dropna()
 
 # ------------------------
