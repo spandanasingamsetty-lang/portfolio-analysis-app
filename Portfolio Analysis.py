@@ -3,6 +3,12 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import os
+import warnings
+
+# -----------------------------
+# Suppress FutureWarnings
+# -----------------------------
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # -----------------------------
 # Page configuration
@@ -72,7 +78,7 @@ invalid_symbols = []
 
 for sym in selected_symbols:
     try:
-        data = yf.download(sym + ".NS", period="6mo", interval="1d")['Adj Close']
+        data = yf.download(sym + ".NS", period="6mo", interval="1d", auto_adjust=True)['Adj Close']
         if data.empty:
             invalid_symbols.append(sym)
         else:
@@ -97,7 +103,7 @@ if os.path.exists(benchmark_cache):
     benchmark = pd.read_csv(benchmark_cache, index_col=0, parse_dates=True)['Adj Close']
 else:
     try:
-        benchmark = yf.download("^NSEI", period="6mo", interval="1d")['Adj Close']
+        benchmark = yf.download("^NSEI", period="6mo", interval="1d", auto_adjust=True)['Adj Close']
         benchmark.to_csv(benchmark_cache)
     except Exception as e:
         st.error(f"❌ Failed to fetch benchmark: {e}")
