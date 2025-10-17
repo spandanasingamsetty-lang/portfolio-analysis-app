@@ -2,6 +2,8 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import os
+import time
 
 # -----------------------------
 # Page configuration
@@ -27,7 +29,6 @@ uploaded_file = st.file_uploader("Upload CSV with StockSymbol,Weight", type=["cs
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
-        # Strip spaces and normalize column names
         df.columns = df.columns.str.strip()
         if 'StockSymbol' not in df.columns:
             st.error("CSV must have a column named 'StockSymbol'. Please check the file.")
@@ -44,16 +45,44 @@ if uploaded_file:
             total_investment = st.number_input("Enter Total Investment Amount (₹)", min_value=0.0, value=100000.0)
             
             # -------------------------
-            # 3️⃣ Fetch Historical Data
+            # 3️⃣ Fetch Historical Data with Cache & Retry
             # -------------------------
             st.info("🔄 Fetching 6-month historical data from Yahoo Finance...")
-            prices = pd.DataFrame()
-            for sym in symbols:
-                data = yf.download(sym+".NS", period="6mo", interval="1d")['Adj Close']
-                prices[sym] = data
-            st.success("✅ Stock data fetched successfully!")
+
+            cache_file = "cached_prices.csv"
+            if os.path.exists(cache_file):
+                prices = pd.read_csv(cache_file, index_col=0, parse_dates=True)
+                st.success("✅ Loaded cached stock data!")
+            else:
+                success = False
+                attempts = 0
+                while not success and attempts < 3:
+                    try:
+                        # Batch download all symbols at once
+                        data = yf.download([sym+".NS" for sym in symbols], period="6mo", interval="1d")['Adj Close']
+                        prices = data.copy()
+                        prices.to_csv(cache_file)  # cache locally
+                        success = True
+                        st.success("✅ Stock data fetched successfully!")
+                    except Exception as e:
+                        attempts += 1
+                        st.warning(f"Attempt {attempts}: Error fetching data. Retrying in 5 seconds... {e}")
+                        time.sleep(5)
+                if not success:
+                    st.error("❌ Failed to fetch stock data after multiple attempts.")
+                    st.stop()
             
-            benchmark = yf.download("^NSEI", period="6mo", interval="1d")['Adj Close']
+            # Fetch benchmark with caching
+            benchmark_cache = "cached_benchmark.csv"
+            if os.path.exists(benchmark_cache):
+                benchmark = pd.read_csv(benchmark_cache, index_col=0, parse_dates=True)['Adj Close']
+            else:
+                try:
+                    benchmark = yf.download("^NSEI", period="6mo", interval="1d")['Adj Close']
+                    benchmark.to_csv(benchmark_cache)
+                except Exception as e:
+                    st.error(f"❌ Failed to fetch benchmark data: {e}")
+                    st.stop()
             
             # -------------------------
             # 4️⃣ Portfolio Optimization
@@ -67,7 +96,6 @@ if uploaded_file:
             cov_matrix = returns.cov()
             num_stocks = len(symbols)
             
-            # Monte Carlo simulation
             num_portfolios = 50000
             results = np.zeros((3, num_portfolios))
             weight_array = []
@@ -86,29 +114,20 @@ if uploaded_file:
             max_idx = np.argmax(results[2])
             optimum_weights = weight_array[max_idx]
             
-            # Portfolio metrics
             portfolio_daily_returns = returns @ optimum_weights
             portfolio_return = np.sum(optimum_weights * mean_returns) * 252
             portfolio_volatility = np.sqrt(np.dot(optimum_weights.T, np.dot(cov_matrix*252, optimum_weights)))
             
-            # Beta
             covariance_with_benchmark = np.cov(portfolio_daily_returns, benchmark_returns.loc[portfolio_daily_returns.index])[0][1]
             benchmark_var = np.var(benchmark_returns.loc[portfolio_daily_returns.index])
             beta = covariance_with_benchmark / benchmark_var
-            
-            # Treynor
             treynor = (portfolio_return - risk_free_rate) / beta if beta != 0 else np.nan
-            
-            # Jensen's Alpha
             benchmark_return_annual = benchmark_returns.mean() * 252
             jensen_alpha = portfolio_return - (risk_free_rate + beta * (benchmark_return_annual - risk_free_rate))
-            
-            # M2
             sharpe_portfolio = (portfolio_return - risk_free_rate)/portfolio_volatility
             benchmark_vol = np.std(benchmark_returns) * np.sqrt(252)
             m2 = sharpe_portfolio * benchmark_vol + risk_free_rate
             
-            # Monthly returns
             portfolio_daily_returns.index = pd.to_datetime(portfolio_daily_returns.index)
             monthly_returns = portfolio_daily_returns.resample('M').apply(lambda x: (1+x).prod()-1)
             
