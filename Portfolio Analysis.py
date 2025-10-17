@@ -8,7 +8,7 @@ import datetime
 # Page Setup
 # ------------------------
 st.set_page_config(page_title="PortfolioAnalysis – Spandana, Visista", layout="wide")
-st.title("PortfolioAnalysis – Spandana, Visista")
+st.title("Portfolio Analysis")
 st.markdown("Select NSE companies, set investment parameters, and calculate optimal portfolio weights.")
 
 # ------------------------
