@@ -1,22 +1,22 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import yfinance as yf
-import datetime
 import requests
+import datetime
 from io import StringIO
 
 st.set_page_config(page_title="PortfolioAnalysis – Spandana, Visista", layout="wide")
 st.title("PortfolioAnalysis – Spandana, Visista")
-st.markdown("Select NSE companies, set investment parameters, and calculate optimal portfolio weights.")
 
 # ------------------------
-# Fetch NSE tickers dynamically
+# Alpha Vantage Key
 # ------------------------
-st.info("Fetching list of NSE companies...")
+ALPHA_KEY = "YOUR_ALPHA_VANTAGE_KEY"  # Replace with your key
+
+# ------------------------
+# Load NSE Companies
+# ------------------------
 nse_url = "https://www1.nseindia.com/content/equities/EQUITY_L.csv"
-
-# Some NSE URLs need headers to allow access
 headers = {"User-Agent": "Mozilla/5.0"}
 response = requests.get(nse_url, headers=headers)
 if response.status_code != 200:
@@ -34,7 +34,7 @@ selected = st.multiselect(
     "Select Companies (up to 10):",
     options=nse_df['SYMBOL'].tolist(),
     format_func=lambda x: f"{x} - {nse_df[nse_df['SYMBOL']==x]['NAME OF COMPANY'].values[0]}",
-    default=["HDFCBANK", "TCS"]
+    default=["HDFCBANK", "RELIANCE"]
 )
 
 if not selected:
@@ -58,30 +58,41 @@ risk_free_rate = st.number_input("Enter risk-free rate (annual, e.g., 0.05 for 5
 total_investment = st.number_input("Enter total investment amount (₹)", 0.0, 10000000.0, 100000.0)
 
 # ------------------------
-# Fetch Historical Data
+# Fetch Historical Data via Alpha Vantage
 # ------------------------
-st.info("Fetching historical data from Yahoo Finance...")
-symbols_yf = [s + ".NS" for s in selected]
-data = yf.download(symbols_yf, start=start_date, end=end_date)
+st.info("Fetching historical data from Alpha Vantage...")
 
-# Handle single vs multi ticker
-if isinstance(data.columns, pd.MultiIndex):
-    if 'Adj Close' in data.columns.get_level_values(0):
-        data = data['Adj Close']
-else:
-    data = data.to_frame(name=selected[0])
+prices = pd.DataFrame()
+failed_symbols = []
 
-if data.empty:
-    st.error("Failed to fetch data. Please check tickers or date range.")
+for sym in selected:
+    try:
+        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol={sym}.BSE&outputsize=full&apikey={ALPHA_KEY}"
+        r = requests.get(url)
+        data = r.json()
+        ts = data['Time Series (Daily)']
+        df = pd.DataFrame(ts).T
+        df.index = pd.to_datetime(df.index)
+        df = df.sort_index()
+        df = df.loc[(df.index.date >= start_date) & (df.index.date <= end_date)]
+        prices[sym] = df['5. adjusted close'].astype(float)
+    except:
+        failed_symbols.append(sym)
+
+if failed_symbols:
+    st.warning(f"⚠️ These symbols could not be fetched and will be ignored: {failed_symbols}")
+
+if prices.empty:
+    st.error("No valid symbols to process. Select different companies or date range.")
     st.stop()
 
 # ------------------------
-# Calculate Daily Returns
+# Calculate Returns
 # ------------------------
-returns = data.pct_change().dropna()
+returns = prices.pct_change().dropna()
 mean_returns = returns.mean()
 cov_matrix = returns.cov()
-num_stocks = len(selected)
+num_stocks = len(returns.columns)
 
 # ------------------------
 # Portfolio Optimization (Max Sharpe)
@@ -103,12 +114,10 @@ for i in range(num_portfolios):
     results[2, i] = sharpe
 
 # ------------------------
-# Find Optimal Portfolio
+# Optimal Portfolio
 # ------------------------
 max_idx = np.argmax(results[2])
 opt_weights = weights_record[max_idx]
-
-# Portfolio Metrics
 portfolio_return = results[0, max_idx]
 portfolio_volatility = results[1, max_idx]
 sharpe_ratio = results[2, max_idx]
@@ -118,7 +127,7 @@ sharpe_ratio = results[2, max_idx]
 # ------------------------
 st.subheader("💹 Optimal Portfolio Weights")
 weights_df = pd.DataFrame({
-    "Stock": selected,
+    "Stock": returns.columns,
     "Weight": np.round(opt_weights, 4),
     "Invested Amount (₹)": np.round(opt_weights * total_investment, 2)
 })
