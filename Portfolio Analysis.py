@@ -2,33 +2,19 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import os
 import warnings
 
-# -----------------------------
-# Suppress FutureWarnings
-# -----------------------------
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# -----------------------------
-# Page configuration
-# -----------------------------
 st.set_page_config(page_title="PortfolioAnalysis – Spandana, Visista", layout="wide")
-st.markdown("""
-    <style>
-    .main {background-color: #F3F3F3;}
-    h1, h2, h3 {color: #7A1FA2;}
-    .stButton>button {background-color: #B57EDC; color:white;}
-    .stDownloadButton>button {background-color: #B57EDC; color:white;}
-    </style>
-""", unsafe_allow_html=True)
 
 st.title("PortfolioAnalysis – Spandana, Visista")
 st.markdown("Dynamic portfolio dashboard with optimum weights, metrics, charts, and investment allocation.")
 
 # -------------------------
-# 1️⃣ Company Selection
+# NIFTY 50 Companies
 # -------------------------
+# key: Yahoo ticker without .NS, value: company name
 nifty50_companies = {
     "HDFCBANK": "HDFC Bank",
     "TCS": "Tata Consultancy Services",
@@ -40,35 +26,31 @@ nifty50_companies = {
     "SBIN": "State Bank of India",
     "LT": "Larsen & Toubro",
     "AXISBANK": "Axis Bank",
-    # Add remaining NIFTY 50 symbols as needed
 }
 
 st.markdown("### 📌 Select Companies (up to 10)")
-selected_symbols = st.multiselect(
+selected = st.multiselect(
     "Choose NIFTY 50 stocks:",
     options=list(nifty50_companies.keys()),
     format_func=lambda x: f"{x} - {nifty50_companies[x]}",
     default=["HDFCBANK","TCS","RELIANCE"]
 )
 
-if not selected_symbols:
+if not selected:
     st.warning("Please select at least one company to proceed.")
     st.stop()
-elif len(selected_symbols) > 10:
+elif len(selected) > 10:
     st.warning("You can select up to 10 companies only.")
     st.stop()
-else:
-    st.success(f"✅ Selected: {', '.join(selected_symbols)}")
 
 # -------------------------
-# 2️⃣ User Inputs
+# User Inputs
 # -------------------------
-st.markdown("### 🏦 User Inputs")
 risk_free_rate = st.number_input("Enter Risk-free rate (annual, e.g., 0.05 for 5%)", min_value=0.0, max_value=1.0, value=0.05)
 total_investment = st.number_input("Enter Total Investment Amount (₹)", min_value=0.0, value=100000.0)
 
 # -------------------------
-# 3️⃣ Fetch Data & Validate
+# Fetch stock data
 # -------------------------
 st.info("🔄 Fetching 6-month historical prices...")
 
@@ -76,9 +58,10 @@ prices = pd.DataFrame()
 valid_symbols = []
 invalid_symbols = []
 
-for sym in selected_symbols:
+for sym in selected:
+    yahoo_sym = sym + ".NS"
     try:
-        data = yf.download(sym + ".NS", period="6mo", interval="1d", auto_adjust=True)['Adj Close']
+        data = yf.download(yahoo_sym, period="6mo", interval="1d", auto_adjust=True)['Adj Close']
         if data.empty:
             invalid_symbols.append(sym)
         else:
@@ -96,21 +79,16 @@ if not valid_symbols:
 st.success(f"✅ Successfully fetched data for: {valid_symbols}")
 
 # -------------------------
-# 4️⃣ Fetch Benchmark
+# Fetch Benchmark
 # -------------------------
-benchmark_cache = "cached_benchmark.csv"
-if os.path.exists(benchmark_cache):
-    benchmark = pd.read_csv(benchmark_cache, index_col=0, parse_dates=True)['Adj Close']
-else:
-    try:
-        benchmark = yf.download("^NSEI", period="6mo", interval="1d", auto_adjust=True)['Adj Close']
-        benchmark.to_csv(benchmark_cache)
-    except Exception as e:
-        st.error(f"❌ Failed to fetch benchmark: {e}")
-        st.stop()
+try:
+    benchmark = yf.download("^NSEI", period="6mo", interval="1d", auto_adjust=True)['Adj Close']
+except Exception as e:
+    st.error(f"❌ Failed to fetch benchmark: {e}")
+    st.stop()
 
 # -------------------------
-# 5️⃣ Portfolio Optimization
+# Portfolio Optimization
 # -------------------------
 st.info("⚡ Calculating optimum portfolio weights...")
 
@@ -120,7 +98,6 @@ mean_returns = returns.mean()
 cov_matrix = returns.cov()
 num_stocks = len(valid_symbols)
 
-# Monte Carlo simulation for optimum weights
 num_portfolios = 50000
 results = np.zeros((3, num_portfolios))
 weight_array = []
@@ -157,7 +134,7 @@ portfolio_daily_returns.index = pd.to_datetime(portfolio_daily_returns.index)
 monthly_returns = portfolio_daily_returns.resample('M').apply(lambda x: (1+x).prod()-1)
 
 # -------------------------
-# 6️⃣ Display Results
+# Display results
 # -------------------------
 st.markdown("### 💹 Optimum Portfolio Weights")
 weights_df = pd.DataFrame({
@@ -191,7 +168,7 @@ cumulative_df = pd.DataFrame({
 st.line_chart(cumulative_df)
 
 # -------------------------
-# 7️⃣ Download Report
+# Download Report
 # -------------------------
 report = weights_df.copy()
 report["Expected Return"] = round(portfolio_return,4)
