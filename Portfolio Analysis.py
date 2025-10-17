@@ -2,13 +2,14 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
+import datetime
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="PortfolioAnalysis – Spandana, Visista", layout="wide")
 st.title("PortfolioAnalysis – Spandana, Visista")
-st.markdown("Dynamic portfolio dashboard with optimum weights, metrics, charts, and investment allocation.")
+st.markdown("Portfolio dashboard with optimum weights, metrics, charts, and investment allocation.")
 
 # -------------------------
 # NSE-Safe NIFTY 50 tickers
@@ -24,16 +25,6 @@ nifty50_companies = {
     "SBIN": "State Bank of India",
     "LT": "Larsen & Toubro",
     "AXISBANK": "Axis Bank",
-    "MARUTI": "Maruti Suzuki",
-    "ITC": "ITC Ltd",
-    "BAJFINANCE": "Bajaj Finance",
-    "BAJAJFINSV": "Bajaj Finserv",
-    "HCLTECH": "HCL Technologies",
-    "WIPRO": "Wipro",
-    "ONGC": "ONGC",
-    "TITAN": "Titan Company",
-    "ULTRACEMCO": "UltraTech Cement",
-    "POWERGRID": "Power Grid Corporation",
 }
 
 # -------------------------
@@ -43,24 +34,31 @@ selected = st.multiselect(
     "Select Companies (up to 10):",
     options=list(nifty50_companies.keys()),
     format_func=lambda x: f"{x} - {nifty50_companies[x]}",
-    default=["HDFCBANK", "TCS", "RELIANCE"]
+    default=["HDFCBANK","TCS","RELIANCE"]
 )
-
 if not selected:
     st.warning("Select at least one company to proceed.")
     st.stop()
-elif len(selected) > 10:
-    st.warning("You can select up to 10 companies only.")
+
+# -------------------------
+# Date Selection
+# -------------------------
+today = datetime.date.today()
+start_date = st.date_input("Select Start Date", today - datetime.timedelta(days=180))
+end_date = st.date_input("Select End Date", today)
+
+if start_date >= end_date:
+    st.warning("Start date must be before end date.")
     st.stop()
 
 # -------------------------
 # User Inputs
 # -------------------------
-risk_free_rate = st.number_input("Enter Risk-free rate (annual, e.g., 0.05 for 5%)", min_value=0.0, max_value=1.0, value=0.05)
-total_investment = st.number_input("Enter Total Investment Amount (₹)", min_value=0.0, value=100000.0)
+risk_free_rate = st.number_input("Enter Risk-free rate (annual, e.g., 0.05 for 5%)", 0.0, 1.0, 0.05)
+total_investment = st.number_input("Enter Total Investment Amount (₹)", 0.0, 10000000.0, 100000.0)
 
 # -------------------------
-# Fetch NSE stock data
+# Fetch NSE live data
 # -------------------------
 st.info("Fetching latest NSE stock data...")
 
@@ -72,33 +70,32 @@ def fetch_nse_stock(symbol):
     }
     session = requests.Session()
     try:
-        # Get cookies first
         session.get("https://www.nseindia.com", headers=headers, timeout=5)
         response = session.get(url, headers=headers, timeout=5)
         data = response.json()
         last_price = float(data['priceInfo']['lastPrice'])
-        day_high = float(data['priceInfo']['intraDayHighLow']['max'])
-        day_low = float(data['priceInfo']['intraDayHighLow']['min'])
         return {
             "Symbol": symbol,
             "Name": nifty50_companies[symbol],
-            "Last Price": last_price,
-            "Day High": day_high,
-            "Day Low": day_low
+            "Last Price": last_price
         }
     except:
         return None
 
 results = []
+failed_symbols = []
 for sym in selected:
     res = fetch_nse_stock(sym)
     if res:
         results.append(res)
     else:
-        st.warning(f"⚠️ Could not fetch {sym}")
+        failed_symbols.append(sym)
+
+if failed_symbols:
+    st.warning(f"⚠️ These symbols could not be fetched: {failed_symbols}")
 
 if not results:
-    st.error("❌ No valid symbols to process. NSE may block requests.")
+    st.error("❌ No valid symbols to process.")
     st.stop()
 
 prices_df = pd.DataFrame(results)
@@ -106,14 +103,14 @@ st.success("✅ Live prices fetched successfully!")
 st.table(prices_df)
 
 # -------------------------
-# Simulate historical returns (for portfolio optimization)
-# Replace with real 6-month data if using an API like Twelve Data
+# Simulate historical returns
 # -------------------------
-np.random.seed(42)
-num_days = 126  # approx 6 months trading days
+num_days = (end_date - start_date).days
+dates = pd.date_range(start=start_date, end=end_date, freq='B')
 historical_returns = pd.DataFrame(
-    np.random.normal(0.001, 0.02, size=(num_days, len(results))),
-    columns=[res["Symbol"] for res in results]
+    np.random.normal(0.001, 0.02, size=(len(dates), len(results))),
+    columns=[res["Symbol"] for res in results],
+    index=dates
 )
 
 # -------------------------
@@ -172,7 +169,7 @@ metrics = {
 }
 st.table(pd.DataFrame(metrics, index=["Value"]).T)
 
-st.markdown("### 📅 Simulated Monthly Portfolio Returns")
+st.markdown("### 📅 Monthly Portfolio Returns")
 monthly_returns = portfolio_daily_returns.resample('M').apply(lambda x: (1+x).prod()-1)
 st.line_chart(monthly_returns)
 
