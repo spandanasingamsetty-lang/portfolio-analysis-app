@@ -5,8 +5,8 @@ import requests
 import datetime
 from io import StringIO
 
-st.set_page_config(page_title="PortfolioAnalysis – Spandana, Visista", layout="wide")
-st.title("PortfolioAnalysis – Spandana, Visista")
+st.set_page_config(page_title="Portfolio Analysis", layout="wide")
+st.title("Portfolio Analysis")
 
 # ------------------------
 # Alpha Vantage API Key
