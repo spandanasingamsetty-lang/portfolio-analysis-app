@@ -7,36 +7,34 @@ import datetime
 # ------------------------
 # Streamlit page setup
 # ------------------------
-st.set_page_config(page_title="NSE Portfolio Optimizer", layout="wide")
-st.title("NSE Portfolio Optimizer")
+st.set_page_config(page_title="PortfolioAnalysis – Spandana, Visista", layout="wide")
+st.title("PortfolioAnalysis – Spandana, Visista")
 st.markdown("Select companies, set investment parameters, and calculate optimal portfolio weights.")
 
 # ------------------------
-# Fetch NSE tickers
+# Predefined NSE tickers (subset; can expand to all 2000+ tickers)
 # ------------------------
-@st.cache_data
-def fetch_nse_tickers():
-    url = "https://www.nseindia.com/api/equity-stockIndices"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "en-US,en;q=0.9"
-    }
-    session = requests.Session()
-    session.get("https://www.nseindia.com", headers=headers, timeout=5)  # Get cookies
-    response = session.get(url, headers=headers, timeout=5)
-    data = response.json()
-    tickers = [item['symbol'] for item in data['data']]
-    return tickers
-
-nse_tickers = fetch_nse_tickers()
+nse_tickers = {
+    "HDFCBANK": "HDFC Bank",
+    "TCS": "Tata Consultancy Services",
+    "RELIANCE": "Reliance Industries",
+    "INFY": "Infosys",
+    "HINDUNILVR": "Hindustan Unilever",
+    "ICICIBANK": "ICICI Bank",
+    "KOTAKBANK": "Kotak Mahindra Bank",
+    "SBIN": "State Bank of India",
+    "LT": "Larsen & Toubro",
+    "AXISBANK": "Axis Bank"
+}
 
 # ------------------------
 # Company selection
 # ------------------------
 selected = st.multiselect(
     "Select Companies (up to 10):",
-    options=nse_tickers,
-    default=["RELIANCE", "TCS", "HDFCBANK"]
+    options=nse_tickers.keys(),
+    format_func=lambda x: f"{x} - {nse_tickers[x]}",
+    default=["HDFCBANK", "TCS"]
 )
 
 if not selected:
