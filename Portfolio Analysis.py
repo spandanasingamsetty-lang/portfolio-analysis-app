@@ -72,7 +72,7 @@ invalid_symbols = []
 
 for sym in selected_symbols:
     try:
-        data = yf.download(sym+".NS", period="6mo", interval="1d")['Adj Close']
+        data = yf.download(sym + ".NS", period="6mo", interval="1d")['Adj Close']
         if data.empty:
             invalid_symbols.append(sym)
         else:
@@ -82,7 +82,7 @@ for sym in selected_symbols:
         invalid_symbols.append(sym)
 
 if invalid_symbols:
-    st.warning(f"⚠️ These symbols are invalid/delisted and will be ignored: {invalid_symbols}")
+    st.warning(f"⚠️ These symbols could not be fetched and will be ignored: {invalid_symbols}")
 if not valid_symbols:
     st.error("❌ No valid symbols to process. Select different companies.")
     st.stop()
