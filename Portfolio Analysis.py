@@ -3,191 +3,96 @@ import pandas as pd
 import numpy as np
 import requests
 import datetime
-import warnings
+import yfinance as yf
 
-warnings.simplefilter(action='ignore', category=FutureWarning)
-
-st.set_page_config(page_title="PortfolioAnalysis – Spandana, Visista", layout="wide")
-st.title("PortfolioAnalysis – Spandana, Visista")
-st.markdown("Portfolio dashboard with optimum weights, metrics, charts, and investment allocation.")
-
-# -------------------------
-# NSE-Safe NIFTY 50 tickers
-# -------------------------
-nifty50_companies = {
-    "HDFCBANK": "HDFC Bank",
-    "TCS": "Tata Consultancy Services",
-    "RELIANCE": "Reliance Industries",
-    "HINDUNILVR": "Hindustan Unilever",
-    "INFY": "Infosys",
-    "ICICIBANK": "ICICI Bank",
-    "KOTAKBANK": "Kotak Mahindra Bank",
-    "SBIN": "State Bank of India",
-    "LT": "Larsen & Toubro",
-    "AXISBANK": "Axis Bank",
-}
-
-# -------------------------
-# Company Selection
-# -------------------------
-selected = st.multiselect(
-    "Select Companies (up to 10):",
-    options=list(nifty50_companies.keys()),
-    format_func=lambda x: f"{x} - {nifty50_companies[x]}",
-    default=["HDFCBANK","TCS","RELIANCE"]
-)
-if not selected:
-    st.warning("Select at least one company to proceed.")
-    st.stop()
-
-# -------------------------
-# Date Selection
-# -------------------------
-today = datetime.date.today()
-start_date = st.date_input("Select Start Date", today - datetime.timedelta(days=180))
-end_date = st.date_input("Select End Date", today)
-
-if start_date >= end_date:
-    st.warning("Start date must be before end date.")
-    st.stop()
-
-# -------------------------
-# User Inputs
-# -------------------------
-risk_free_rate = st.number_input("Enter Risk-free rate (annual, e.g., 0.05 for 5%)", 0.0, 1.0, 0.05)
-total_investment = st.number_input("Enter Total Investment Amount (₹)", 0.0, 10000000.0, 100000.0)
-
-# -------------------------
-# Fetch NSE live data
-# -------------------------
-st.info("Fetching latest NSE stock data...")
-
-def fetch_nse_stock(symbol):
-    url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol}"
+# Function to fetch the list of all NSE-listed companies
+def fetch_nse_tickers():
+    url = "https://www.nseindia.com/api/equity-stockIndices"
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept-Language": "en-US,en;q=0.9"
     }
     session = requests.Session()
-    try:
-        session.get("https://www.nseindia.com", headers=headers, timeout=5)
-        response = session.get(url, headers=headers, timeout=5)
-        data = response.json()
-        last_price = float(data['priceInfo']['lastPrice'])
-        return {
-            "Symbol": symbol,
-            "Name": nifty50_companies[symbol],
-            "Last Price": last_price
-        }
-    except:
-        return None
+    session.get("https://www.nseindia.com", headers=headers, timeout=5)  # Get cookies
+    response = session.get(url, headers=headers, timeout=5)
+    data = response.json()
+    tickers = [item['symbol'] for item in data['data']]
+    return tickers
 
-results = []
-failed_symbols = []
-for sym in selected:
-    res = fetch_nse_stock(sym)
-    if res:
-        results.append(res)
-    else:
-        failed_symbols.append(sym)
+# Fetch the list of tickers
+tickers = fetch_nse_tickers()
 
-if failed_symbols:
-    st.warning(f"⚠️ These symbols could not be fetched: {failed_symbols}")
+# Streamlit UI
+st.title("NSE Portfolio Optimizer")
+st.markdown("Select companies to analyze:")
 
-if not results:
-    st.error("❌ No valid symbols to process.")
-    st.stop()
-
-prices_df = pd.DataFrame(results)
-st.success("✅ Live prices fetched successfully!")
-st.table(prices_df)
-
-# -------------------------
-# Simulate historical returns
-# -------------------------
-num_days = (end_date - start_date).days
-dates = pd.date_range(start=start_date, end=end_date, freq='B')
-historical_returns = pd.DataFrame(
-    np.random.normal(0.001, 0.02, size=(len(dates), len(results))),
-    columns=[res["Symbol"] for res in results],
-    index=dates
+# Multi-select dropdown for company selection
+selected_tickers = st.multiselect(
+    "Choose companies:",
+    options=tickers,
+    default=["RELIANCE", "TCS", "HDFCBANK"]
 )
 
-# -------------------------
-# Portfolio Optimization
-# -------------------------
-st.info("Calculating optimum portfolio weights...")
+if not selected_tickers:
+    st.warning("Please select at least one company.")
+else:
+    st.write(f"Selected companies: {', '.join(selected_tickers)}")
 
-returns = historical_returns
-mean_returns = returns.mean()
-cov_matrix = returns.cov()
-num_stocks = len(results)
+    # Fetch historical data for the selected companies
+    data = yf.download(selected_tickers, start="2020-01-01", end=datetime.datetime.today().strftime('%Y-%m-%d'))['Adj Close']
 
-num_portfolios = 50000
-results_array = np.zeros((3, num_portfolios))
-weight_array = []
+    # Calculate daily returns
+    daily_returns = data.pct_change().dropna()
 
-for i in range(num_portfolios):
-    weights = np.random.random(num_stocks)
-    weights /= np.sum(weights)
-    weight_array.append(weights)
-    port_return = np.sum(weights * mean_returns) * 252
-    port_std = np.sqrt(np.dot(weights.T, np.dot(cov_matrix*252, weights)))
-    sharpe_ratio = (port_return - risk_free_rate)/port_std
-    results_array[0,i] = port_return
-    results_array[1,i] = port_std
-    results_array[2,i] = sharpe_ratio
+    # Calculate mean returns and covariance matrix
+    mean_returns = daily_returns.mean()
+    cov_matrix = daily_returns.cov()
 
-max_idx = np.argmax(results_array[2])
-optimum_weights = weight_array[max_idx]
+    # Number of portfolios to simulate
+    num_portfolios = 50000
+    results = np.zeros((3, num_portfolios))
+    weights_record = []
 
-# Portfolio metrics
-portfolio_daily_returns = returns @ optimum_weights
-portfolio_return = np.sum(optimum_weights * mean_returns) * 252
-portfolio_volatility = np.sqrt(np.dot(optimum_weights.T, np.dot(cov_matrix*252, optimum_weights)))
-sharpe_portfolio = (portfolio_return - risk_free_rate)/portfolio_volatility
-m2 = sharpe_portfolio * portfolio_volatility + risk_free_rate
+    # Simulate portfolios
+    for i in range(num_portfolios):
+        weights = np.random.random(len(selected_tickers))
+        weights /= np.sum(weights)
+        weights_record.append(weights)
+        portfolio_return = np.sum(weights * mean_returns) * 252
+        portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(cov_matrix * 252, weights)))
+        portfolio_sharpe = portfolio_return / portfolio_volatility
+        results[0, i] = portfolio_return
+        results[1, i] = portfolio_volatility
+        results[2, i] = portfolio_sharpe
 
-# -------------------------
-# Display Results
-# -------------------------
-st.markdown("### 💹 Optimum Portfolio Weights")
-weights_df = pd.DataFrame({
-    "Stock": [res["Symbol"] for res in results],
-    "Optimum Weight": np.round(optimum_weights,4),
-    "Invested Amount (₹)": np.round(optimum_weights * total_investment,2)
-})
-st.bar_chart(weights_df.set_index("Stock")["Optimum Weight"])
-st.table(weights_df.style.set_properties(**{'background-color':'#FFFFFF','color':'#7A1FA2'}))
+    # Convert results to DataFrame
+    portfolio_df = pd.DataFrame(results.T, columns=['Returns', 'Volatility', 'Sharpe Ratio'])
+    portfolio_df['Weights'] = weights_record
 
-st.markdown("### 🧮 Portfolio Metrics")
-metrics = {
-    "📈 Expected Return": round(portfolio_return,4),
-    "📉 Volatility (σ)": round(portfolio_volatility,4),
-    "⭐ Sharpe Ratio": round(sharpe_portfolio,4),
-    "💎 M²": round(m2,4)
-}
-st.table(pd.DataFrame(metrics, index=["Value"]).T)
+    # Locate the portfolio with the highest Sharpe ratio
+    max_sharpe_idx = portfolio_df['Sharpe Ratio'].idxmax()
+    optimal_weights = portfolio_df.iloc[max_sharpe_idx]['Weights']
 
-st.markdown("### 📅 Monthly Portfolio Returns")
-monthly_returns = portfolio_daily_returns.resample('M').apply(lambda x: (1+x).prod()-1)
-st.line_chart(monthly_returns)
+    # Display optimal weights
+    st.subheader("Optimal Portfolio Weights")
+    optimal_weights_df = pd.DataFrame(optimal_weights, index=selected_tickers, columns=['Weight'])
+    st.write(optimal_weights_df)
 
-st.markdown("### 📈 Cumulative Portfolio Growth")
-cumulative_returns = (1 + portfolio_daily_returns).cumprod()
-st.line_chart(cumulative_returns)
+    # Display portfolio performance metrics
+    st.subheader("Portfolio Performance Metrics")
+    st.write(f"Expected Annual Return: {portfolio_df['Returns'].iloc[max_sharpe_idx]:.2%}")
+    st.write(f"Annual Volatility: {portfolio_df['Volatility'].iloc[max_sharpe_idx]:.2%}")
+    st.write(f"Sharpe Ratio: {portfolio_df['Sharpe Ratio'].iloc[max_sharpe_idx]:.2f}")
 
-# -------------------------
-# Download Report
-# -------------------------
-report = weights_df.copy()
-report["Expected Return"] = round(portfolio_return,4)
-report["Volatility"] = round(portfolio_volatility,4)
-report["Sharpe Ratio"] = round(sharpe_portfolio,4)
-csv = report.to_csv(index=False).encode()
-st.download_button(
-    label="📥 Download Portfolio Report as CSV",
-    data=csv,
-    file_name='portfolio_report.csv',
-    mime='text/csv'
-)
+    # Plot efficient frontier
+    st.subheader("Efficient Frontier")
+    st.line_chart(portfolio_df[['Returns', 'Volatility']])
+
+    # Download portfolio report
+    csv = portfolio_df.to_csv().encode()
+    st.download_button(
+        label="Download Portfolio Report",
+        data=csv,
+        file_name='portfolio_report.csv',
+        mime='text/csv'
+    )
