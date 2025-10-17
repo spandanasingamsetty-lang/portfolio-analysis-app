@@ -45,34 +45,35 @@ if uploaded_file:
             total_investment = st.number_input("Enter Total Investment Amount (₹)", min_value=0.0, value=100000.0)
             
             # -------------------------
-            # 3️⃣ Fetch Historical Data with Cache & Retry
+            # 3️⃣ Validate Symbols & Fetch Data
             # -------------------------
-            st.info("🔄 Fetching 6-month historical data from Yahoo Finance...")
+            st.info("🔄 Validating symbols and fetching 6-month historical data...")
 
-            cache_file = "cached_prices.csv"
-            if os.path.exists(cache_file):
-                prices = pd.read_csv(cache_file, index_col=0, parse_dates=True)
-                st.success("✅ Loaded cached stock data!")
-            else:
-                success = False
-                attempts = 0
-                while not success and attempts < 3:
-                    try:
-                        # Batch download all symbols at once
-                        data = yf.download([sym+".NS" for sym in symbols], period="6mo", interval="1d")['Adj Close']
-                        prices = data.copy()
-                        prices.to_csv(cache_file)  # cache locally
-                        success = True
-                        st.success("✅ Stock data fetched successfully!")
-                    except Exception as e:
-                        attempts += 1
-                        st.warning(f"Attempt {attempts}: Error fetching data. Retrying in 5 seconds... {e}")
-                        time.sleep(5)
-                if not success:
-                    st.error("❌ Failed to fetch stock data after multiple attempts.")
-                    st.stop()
+            valid_symbols = []
+            invalid_symbols = []
+
+            prices = pd.DataFrame()
+            for sym in symbols:
+                try:
+                    data = yf.download(sym+".NS", period="6mo", interval="1d")['Adj Close']
+                    if data.empty:
+                        invalid_symbols.append(sym)
+                    else:
+                        prices[sym] = data
+                        valid_symbols.append(sym)
+                except:
+                    invalid_symbols.append(sym)
+
+            if invalid_symbols:
+                st.warning(f"⚠️ These symbols are invalid or delisted and will be ignored: {invalid_symbols}")
             
-            # Fetch benchmark with caching
+            if not valid_symbols:
+                st.error("❌ No valid symbols available. Cannot proceed.")
+                st.stop()
+            
+            st.success(f"✅ Successfully fetched data for symbols: {valid_symbols}")
+            
+            # Fetch benchmark
             benchmark_cache = "cached_benchmark.csv"
             if os.path.exists(benchmark_cache):
                 benchmark = pd.read_csv(benchmark_cache, index_col=0, parse_dates=True)['Adj Close']
@@ -94,7 +95,7 @@ if uploaded_file:
             
             mean_returns = returns.mean()
             cov_matrix = returns.cov()
-            num_stocks = len(symbols)
+            num_stocks = len(valid_symbols)
             
             num_portfolios = 50000
             results = np.zeros((3, num_portfolios))
@@ -136,7 +137,7 @@ if uploaded_file:
             # -------------------------
             st.markdown("### 💹 Optimum Portfolio Weights")
             weights_df = pd.DataFrame({
-                "Stock": symbols,
+                "Stock": valid_symbols,
                 "Optimum Weight": np.round(optimum_weights, 4),
                 "Invested Amount (₹)": np.round(optimum_weights * total_investment, 2)
             })
