@@ -9,23 +9,20 @@ st.set_page_config(page_title="PortfolioAnalysis – Spandana, Visista", layout=
 st.title("PortfolioAnalysis – Spandana, Visista")
 
 # ------------------------
-# Alpha Vantage Key
+# Alpha Vantage API Key
 # ------------------------
 ALPHA_KEY = "YOUR_ALPHA_VANTAGE_KEY"  # Replace with your key
 
 # ------------------------
-# Load NSE Companies
+# Load local NSE tickers CSV
 # ------------------------
-nse_url = "https://www1.nseindia.com/content/equities/EQUITY_L.csv"
-headers = {"User-Agent": "Mozilla/5.0"}
-response = requests.get(nse_url, headers=headers)
-if response.status_code != 200:
-    st.error("Failed to fetch NSE tickers. Try again later.")
+try:
+    nse_df = pd.read_csv("nse_tickers.csv")
+except FileNotFoundError:
+    st.error("Local NSE tickers CSV not found. Upload nse_tickers.csv in the app folder.")
     st.stop()
 
-csv_data = StringIO(response.text)
-nse_df = pd.read_csv(csv_data)
-nse_df = nse_df[['SYMBOL', 'NAME OF COMPANY']].dropna()
+nse_df = nse_df[['SYMBOL', 'NAME']].dropna()
 
 # ------------------------
 # Company Selection
@@ -33,7 +30,7 @@ nse_df = nse_df[['SYMBOL', 'NAME OF COMPANY']].dropna()
 selected = st.multiselect(
     "Select Companies (up to 10):",
     options=nse_df['SYMBOL'].tolist(),
-    format_func=lambda x: f"{x} - {nse_df[nse_df['SYMBOL']==x]['NAME OF COMPANY'].values[0]}",
+    format_func=lambda x: f"{x} - {nse_df[nse_df['SYMBOL']==x]['NAME'].values[0]}",
     default=["HDFCBANK", "RELIANCE"]
 )
 
