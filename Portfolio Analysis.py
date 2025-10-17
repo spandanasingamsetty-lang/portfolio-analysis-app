@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-import time
-import datetime
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -13,7 +11,7 @@ st.title("PortfolioAnalysis – Spandana, Visista")
 st.markdown("Dynamic portfolio dashboard with optimum weights, metrics, charts, and investment allocation.")
 
 # -------------------------
-# NIFTY 50 Companies
+# NSE-Safe NIFTY 50 tickers
 # -------------------------
 nifty50_companies = {
     "HDFCBANK": "HDFC Bank",
@@ -26,13 +24,26 @@ nifty50_companies = {
     "SBIN": "State Bank of India",
     "LT": "Larsen & Toubro",
     "AXISBANK": "Axis Bank",
+    "MARUTI": "Maruti Suzuki",
+    "ITC": "ITC Ltd",
+    "BAJFINANCE": "Bajaj Finance",
+    "BAJAJFINSV": "Bajaj Finserv",
+    "HCLTECH": "HCL Technologies",
+    "WIPRO": "Wipro",
+    "ONGC": "ONGC",
+    "TITAN": "Titan Company",
+    "ULTRACEMCO": "UltraTech Cement",
+    "POWERGRID": "Power Grid Corporation",
 }
 
+# -------------------------
+# Company Selection
+# -------------------------
 selected = st.multiselect(
     "Select Companies (up to 10):",
     options=list(nifty50_companies.keys()),
     format_func=lambda x: f"{x} - {nifty50_companies[x]}",
-    default=["HDFCBANK","TCS","RELIANCE"]
+    default=["HDFCBANK", "TCS", "RELIANCE"]
 )
 
 if not selected:
@@ -61,7 +72,7 @@ def fetch_nse_stock(symbol):
     }
     session = requests.Session()
     try:
-        # get cookies
+        # Get cookies first
         session.get("https://www.nseindia.com", headers=headers, timeout=5)
         response = session.get(url, headers=headers, timeout=5)
         data = response.json()
@@ -95,8 +106,8 @@ st.success("✅ Live prices fetched successfully!")
 st.table(prices_df)
 
 # -------------------------
-# Generate sample historical returns (since NSE API doesn’t provide 6mo historical directly)
-# In production, replace with proper API (Alpha Vantage / Twelve Data) for historical data
+# Simulate historical returns (for portfolio optimization)
+# Replace with real 6-month data if using an API like Twelve Data
 # -------------------------
 np.random.seed(42)
 num_days = 126  # approx 6 months trading days
